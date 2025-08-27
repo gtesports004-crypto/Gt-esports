@@ -1,0 +1,298 @@
+import React, { useEffect, useMemo, useState } from "react"; import { motion } from "framer-motion"; import { Button } from "@/components/ui/button"; import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"; import { Input } from "@/components/ui/input"; import { Textarea } from "@/components/ui/textarea"; import { Label } from "@/components/ui/label"; import { Badge } from "@/components/ui/badge"; import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"; import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"; import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"; import { Switch } from "@/components/ui/switch"; import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"; import { Calendar, Clock, Crown, Download, Gamepad2, Link as LinkIcon, Plus, Shield, Trophy, Users } from "lucide-react";
+
+// Util: localStorage helpers const load = (k, fallback) => { try { const raw = localStorage.getItem(k); return raw ? JSON.parse(raw) : fallback; } catch { return fallback; } }; const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+
+const TZ = "Asia/Kolkata"; // IST — for formatting only
+
+// Seed demo tournament const demo = [ { id: crypto.randomUUID(), title: "Free Fire Squad Battle – Opening Cup", date: new Date(Date.now() + 246060*1000).toISOString().slice(0,10), time: "20:00", mode: "Squad (4)", map: "Bermuda", platform: "Free Fire", entryFee: 0, totalSlots: 48, prize: { first: 1000, second: 500, third: 300 }, rules: "— Emulators not allowed.\n— No teaming/teaming ban.\n— Room ID & Pass shared 10 mins before start in WhatsApp group.\n— Stream sniping = DQ.", contact: "https://wa.me/0000000000", joinLink: "https://chat.whatsapp.com/", notes: "Be ready 15 minutes early.", status: "Open", createdAt: Date.now(), }, ];
+
+function currency(n){ try { return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(Number(n||0)); } catch { return ₹${n} } }
+
+function formatIST(dateStr, timeStr){ try { const [y,m,d] = dateStr.split("-").map(Number); const [hh,mm] = timeStr.split(":").map(Number); const iso = new Date(Date.UTC(y, m-1, d, hh-5, mm-30)); // crude shift to display as IST regardless of local tz return new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: TZ }).format(iso); } catch { return ${dateStr} ${timeStr} IST; } }
+
+export default function FreeFireTournamentHub(){ const [organizer, setOrganizer] = useState(load("ff.organizer", false)); const [tournaments, setTournaments] = useState(() => load("ff.tournaments", demo)); const [regs, setRegs] = useState(() => load("ff.registrations", {})); // { [tid]: Registration[] }
+
+useEffect(() => save("ff.tournaments", tournaments), [tournaments]); useEffect(() => save("ff.registrations", regs), [regs]); useEffect(() => save("ff.organizer", organizer), [organizer]);
+
+const openCount = tournaments.filter(t => t.status !== "Closed").length;
+
+function addTournament(t){ setTournaments(prev => [ { ...t, id: crypto.randomUUID(), createdAt: Date.now() }, ...prev ]); } function updateTournament(id, patch){ setTournaments(prev => prev.map(t => t.id===id ? { ...t, ...patch } : t)); } function removeTournament(id){ setTournaments(prev => prev.filter(t => t.id!==id)); const copy = { ...regs }; delete copy[id]; setRegs(copy); }
+
+function register(tid, payload){ setRegs(prev => ({ ...prev, [tid]: [ { id: crypto.randomUUID(), at: Date.now(), ...payload }, ...(prev[tid]||[]) ] })); }
+
+function exportCSV(tid){ const r = regs[tid]||[]; const headers = ["Team/Player","Leader Name","Free Fire UID","Phone","Email","Members","Notes","Payment Ref","Timestamp"]; const lines = [headers.join(",")]; r.forEach(x=>{ const row = [x.team, x.leader, x.uid, x.phone, x.email, (x.members||"").replaceAll(",", ";"), (x.notes||"").replaceAll(",", ";"), (x.payment||"").replaceAll(",", ";"), new Date(x.at).toLocaleString("en-IN", { timeZone: TZ })]; lines.push(row.map(v=>"${(v??"").toString().replaceAll('"','""')}").join(",")); }); const blob = new Blob(["\ufeff"+lines.join("\n")], { type: "text/csv;charset=utf-8;" }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "registrations.csv"; a.click(); URL.revokeObjectURL(url); }
+
+const totals = useMemo(()=>{ return tournaments.map(t=>({ id: t.id, count: (regs[t.id]?.length)||0 })) },[tournaments, regs]);
+
+return ( <div className="min-h-screen bg-gradient-to-b from-slate-950 to-slate-900 text-slate-100"> <header className="sticky top-0 z-20 backdrop-blur bg-slate-950/60 border-b border-slate-800"> <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between"> <div className="flex items-center gap-3"> <Gamepad2 className="w-7 h-7" /> <span className="text-xl font-bold tracking-tight">Free Fire Tournament Hub</span> <Badge variant="secondary" className="ml-2">Beta</Badge> </div> <div className="flex items-center gap-4"> <a href="#upcoming" className="text-sm hover:underline">Tournaments</a> <a href="#rules" className="text-sm hover:underline">Rules</a> <a href="#faq" className="text-sm hover:underline">FAQ</a> <div className="flex items-center gap-2"> <Shield className="w-4 h-4" /> <Switch checked={organizer} onCheckedChange={setOrganizer} /> <span className="text-xs">Organizer mode</span> </div> </div> </div> </header>
+
+<main className="max-w-6xl mx-auto px-4 pb-24">
+    {/* Hero */}
+    <section className="py-10 md:py-14">
+      <div className="grid md:grid-cols-2 gap-6 items-center">
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
+          <h1 className="text-3xl md:text-5xl font-extrabold leading-tight">
+            Host & Manage <span className="text-emerald-400">Free Fire</span> Tournaments
+          </h1>
+          <p className="mt-3 text-slate-300 max-w-prose">
+            Create events, collect registrations, track slots, and share the room details — all in one simple page.
+            Built for Indian esports communities (IST time & INR prizes supported).
+          </p>
+          <div className="mt-6 flex gap-3">
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button className="rounded-2xl text-base px-5 py-6" size="lg">
+                  <Plus className="mr-2 h-5 w-5"/> New tournament
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Create tournament</DialogTitle>
+                </DialogHeader>
+                <TournamentForm onSubmit={addTournament} />
+              </DialogContent>
+            </Dialog>
+
+            <a href="#upcoming"><Button variant="secondary" className="rounded-2xl text-base px-5 py-6" size="lg"><Trophy className="mr-2 h-5 w-5"/> View tournaments</Button></a>
+          </div>
+          <p className="mt-3 text-sm text-slate-400">{openCount} active {openCount===1?"tournament":"tournaments"} • Data saved in your browser</p>
+        </motion.div>
+
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.1 }}>
+          <Card className="bg-slate-900/60 border-slate-800 shadow-2xl">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><Crown className="w-5 h-5"/> Why organizers like this</CardTitle>
+              <CardDescription>Fast setup • Shareable • Mobile‑first</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3 text-sm text-slate-300">
+              <p>• Add tournaments with prize pool, mode, slots, and rules.</p>
+              <p>• Players register with FF UID; entries tracked per event.</p>
+              <p>• Export registrations to CSV for seeding & payouts.</p>
+              <p>• Toggle <em>Organizer mode</em> to edit, close, or delete events.</p>
+            </CardContent>
+          </Card>
+        </motion.div>
+      </div>
+    </section>
+
+    {/* Tournaments */}
+    <section id="upcoming" className="py-6">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-2xl font-bold flex items-center gap-2"><Trophy className="w-5 h-5"/> Tournaments</h2>
+        {organizer && (
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button size="sm"><Plus className="mr-2 h-4 w-4"/> Add</Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader><DialogTitle>New tournament</DialogTitle></DialogHeader>
+              <TournamentForm onSubmit={addTournament} />
+            </DialogContent>
+          </Dialog>
+        )}
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-5">
+        {tournaments.map(t => (
+          <motion.div key={t.id} initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y:0 }} viewport={{ once: true }}>
+            <Card className="bg-slate-900/60 border-slate-800">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-xl">{t.title}</CardTitle>
+                  <Badge variant={t.status === "Closed" ? "destructive" : "secondary"}>{t.status||"Open"}</Badge>
+                </div>
+                <CardDescription className="flex flex-wrap gap-3 pt-2">
+                  <span className="inline-flex items-center gap-1"><Calendar className="w-4 h-4"/>{formatIST(t.date, t.time)}</span>
+                  <span className="inline-flex items-center gap-1"><Clock className="w-4 h-4"/>{t.time} IST</span>
+                  <span className="inline-flex items-center gap-1"><Users className="w-4 h-4"/>{t.mode}</span>
+                  <span className="inline-flex items-center gap-1"><Trophy className="w-4 h-4"/>{currency((t.prize?.first||0)+(t.prize?.second||0)+(t.prize?.third||0))} pool</span>
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-4">
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-2xl p-3 bg-slate-800/40">
+                    <div className="text-xs text-slate-400">1st</div>
+                    <div className="text-lg font-bold">{currency(t.prize?.first||0)}</div>
+                  </div>
+                  <div className="rounded-2xl p-3 bg-slate-800/40">
+                    <div className="text-xs text-slate-400">2nd</div>
+                    <div className="text-lg font-bold">{currency(t.prize?.second||0)}</div>
+                  </div>
+                  <div className="rounded-2xl p-3 bg-slate-800/40">
+                    <div className="text-xs text-slate-400">3rd</div>
+                    <div className="text-lg font-bold">{currency(t.prize?.third||0)}</div>
+                  </div>
+                </div>
+
+                <div className="text-sm text-slate-300 whitespace-pre-wrap">{t.rules}</div>
+                {t.notes && <div className="text-xs text-slate-400">Note: {t.notes}</div>}
+
+                <div className="flex flex-wrap gap-3 items-center">
+                  <Badge>Map: {t.map||"TBD"}</Badge>
+                  <Badge variant="outline">Slots: {(regs[t.id]?.length||0)}/{t.totalSlots||0}</Badge>
+                  {t.entryFee>0 ? <Badge variant="destructive">Entry: {currency(t.entryFee)}</Badge> : <Badge variant="secondary">FREE</Badge>}
+                </div>
+
+                <Tabs defaultValue="register" className="w-full">
+                  <TabsList className="grid grid-cols-2 w-full">
+                    <TabsTrigger value="register">Register</TabsTrigger>
+                    <TabsTrigger value="players">Players</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="register" className="mt-3">
+                    <RegistrationForm disabled={t.status === "Closed"} onSubmit={(p)=>register(t.id, p)} />
+                    <div className="mt-3 flex items-center gap-2 text-sm">
+                      <LinkIcon className="w-4 h-4"/>
+                      <a className="underline" href={t.joinLink} target="_blank" rel="noreferrer">Join WhatsApp / Discord</a>
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="players" className="mt-3">
+                    <Table>
+                      <TableCaption>{(regs[t.id]?.length||0)} total registrations</TableCaption>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Team/Player</TableHead>
+                          <TableHead>Leader</TableHead>
+                          <TableHead>UID</TableHead>
+                          <TableHead>Phone</TableHead>
+                          <TableHead>Time</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {(regs[t.id]||[]).map(r => (
+                          <TableRow key={r.id}>
+                            <TableCell className="font-medium">{r.team}</TableCell>
+                            <TableCell>{r.leader}</TableCell>
+                            <TableCell>{r.uid}</TableCell>
+                            <TableCell>{r.phone}</TableCell>
+                            <TableCell>{new Date(r.at).toLocaleString("en-IN", { timeZone: TZ })}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+
+                    {organizer && (
+                      <div className="mt-3 flex gap-2">
+                        <Button size="sm" onClick={()=>exportCSV(t.id)}><Download className="mr-2 w-4 h-4"/>Export CSV</Button>
+                        <Button size="sm" variant="secondary" onClick={()=>updateTournament(t.id, { status: t.status === "Closed" ? "Open" : "Closed" })}>
+                          {t.status === "Closed" ? "Re-open" : "Close registrations"}
+                        </Button>
+                        <Button size="sm" variant="destructive" onClick={()=>removeTournament(t.id)}>Delete</Button>
+                      </div>
+                    )}
+                  </TabsContent>
+                </Tabs>
+              </CardContent>
+            </Card>
+          </motion.div>
+        ))}
+      </div>
+    </section>
+
+    {/* Rules & FAQ */}
+    <section id="rules" className="pt-12">
+      <div className="grid md:grid-cols-2 gap-6 items-start">
+        <Card className="bg-slate-900/60 border-slate-800">
+          <CardHeader><CardTitle>Standard Rules</CardTitle><CardDescription>Customize these when you create an event.</CardDescription></CardHeader>
+          <CardContent className="text-sm text-slate-300 space-y-2">
+            <p>• Emulator and hacks not allowed. Instant ban.</p>
+            <p>• Teaming, glitch abuse, or toxic behavior leads to disqualification.</p>
+            <p>• Room ID/Pass will be shared 10 minutes before the match.</p>
+            <p>• No show = forfeit; organizer decision is final.</p>
+            <p>• Stream sniping is prohibited.</p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-slate-900/60 border-slate-800">
+          <CardHeader><CardTitle>FAQ</CardTitle></CardHeader>
+          <CardContent className="text-sm text-slate-300 space-y-3">
+            <div>
+              <p className="font-semibold">How do I pay the entry fee?</p>
+              <p>If the event is paid, you'll see UPI details in the event notes. Add your payment reference in the form.</p>
+            </div>
+            <div>
+              <p className="font-semibold">Can I edit my registration?</p>
+              <p>Submit again with the same team name — latest entry takes priority. Organizers can export and manage entries.</p>
+            </div>
+            <div>
+              <p className="font-semibold">Where is the prize distributed?</p>
+              <p>Winners will be contacted by phone/email/WhatsApp for UPI payout after results are verified.</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </section>
+
+    {/* Footer */}
+    <footer className="mt-12 text-center text-xs text-slate-400">
+      <p>Made for the Free Fire community • IST timezone • Your data stays in your browser</p>
+    </footer>
+  </main>
+</div>
+
+); }
+
+function TournamentForm({ onSubmit }){ const [loading, setLoading] = useState(false); const [form, setForm] = useState({ title: "Free Fire Daily Scrims", date: new Date().toISOString().slice(0,10), time: "20:30", mode: "Squad (4)", map: "Bermuda", platform: "Free Fire", entryFee: 0, totalSlots: 48, prize: { first: 1000, second: 500, third: 300 }, rules: "— No emulator/hacks\n— No teaming\n— Room ID in WhatsApp", contact: "https://wa.me/", joinLink: "https://chat.whatsapp.com/", notes: "Be ready 15 mins early", status: "Open", });
+
+function change(k, v){ setForm(prev => ({ ...prev, [k]: v })); } function changePrize(k, v){ setForm(prev => ({ ...prev, prize: { ...prev.prize, [k]: Number(v||0) } })); }
+
+function submit(e){ e.preventDefault(); setLoading(true); onSubmit({ ...form, entryFee: Number(form.entryFee||0), totalSlots: Number(form.totalSlots||0) }); setLoading(false); }
+
+return ( <form onSubmit={submit} className="grid gap-4"> <div className="grid grid-cols-1 md:grid-cols-2 gap-4"> <div> <Label>Title</Label> <Input value={form.title} onChange={e=>change("title", e.target.value)} required /> </div> <div> <Label>Mode</Label> <Select value={form.mode} onValueChange={v=>change("mode", v)}> <SelectTrigger><SelectValue /></SelectTrigger> <SelectContent> <SelectItem value="Solo">Solo</SelectItem> <SelectItem value="Duo (2)">Duo (2)</SelectItem> <SelectItem value="Squad (4)">Squad (4)</SelectItem> <SelectItem value="Clash Squad">Clash Squad</SelectItem> </SelectContent> </Select> </div> <div> <Label>Date</Label> <Input type="date" value={form.date} onChange={e=>change("date", e.target.value)} required /> </div> <div> <Label>Start time (IST)</Label> <Input type="time" value={form.time} onChange={e=>change("time", e.target.value)} required /> </div> <div> <Label>Map</Label> <Input value={form.map} onChange={e=>change("map", e.target.value)} /> </div> <div> <Label>Total slots</Label> <Input type="number" min={1} value={form.totalSlots} onChange={e=>change("totalSlots", e.target.value)} required /> </div> <div> <Label>Entry fee (INR)</Label> <Input type="number" min={0} value={form.entryFee} onChange={e=>change("entryFee", e.target.value)} /> </div> <div> <Label>Status</Label> <Select value={form.status} onValueChange={v=>change("status", v)}> <SelectTrigger><SelectValue /></SelectTrigger> <SelectContent> <SelectItem value="Open">Open</SelectItem> <SelectItem value="Closed">Closed</SelectItem> </SelectContent> </Select> </div> </div>
+
+<div className="grid grid-cols-3 gap-4">
+    <div>
+      <Label>1st Prize (₹)</Label>
+      <Input type="number" min={0} value={form.prize.first} onChange={e=>changePrize("first", e.target.value)} />
+    </div>
+    <div>
+      <Label>2nd Prize (₹)</Label>
+      <Input type="number" min={0} value={form.prize.second} onChange={e=>changePrize("second", e.target.value)} />
+    </div>
+    <div>
+      <Label>3rd Prize (₹)</Label>
+      <Input type="number" min={0} value={form.prize.third} onChange={e=>changePrize("third", e.target.value)} />
+    </div>
+  </div>
+
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div>
+      <Label>WhatsApp / Discord invite link</Label>
+      <Input value={form.joinLink} onChange={e=>change("joinLink", e.target.value)} />
+    </div>
+    <div>
+      <Label>Contact (WhatsApp link or phone)</Label>
+      <Input value={form.contact} onChange={e=>change("contact", e.target.value)} />
+    </div>
+  </div>
+
+  <div>
+    <Label>Rules</Label>
+    <Textarea rows={5} value={form.rules} onChange={e=>change("rules", e.target.value)} />
+  </div>
+  <div>
+    <Label>Notes (UPI, stream link, etc.)</Label>
+    <Input value={form.notes} onChange={e=>change("notes", e.target.value)} />
+  </div>
+
+  <div className="flex justify-end gap-2">
+    <Button type="submit" disabled={loading}><Plus className="mr-2 w-4 h-4"/> Create</Button>
+  </div>
+</form>
+
+); }
+
+function RegistrationForm({ onSubmit, disabled }){ const [loading, setLoading] = useState(false); const [form, setForm] = useState({ team: "", leader: "", uid: "", phone: "", email: "", members: "", notes: "", payment: "" });
+
+function change(k, v){ setForm(prev => ({ ...prev, [k]: v })); }
+
+function submit(e){ e.preventDefault(); if(disabled) return; setLoading(true); onSubmit(form); setLoading(false); setForm({ team: "", leader: "", uid: "", phone: "", email: "", members: "", notes: "", payment: "" }); }
+
+return ( <form onSubmit={submit} className="grid gap-3"> <div className="grid grid-cols-1 md:grid-cols-2 gap-3"> <div> <Label>Team / Player Name</Label> <Input required value={form.team} onChange={e=>change("team", e.target.value)} placeholder="e.g., Alpha 18" /> </div> <div> <Label>Leader name</Label> <Input required value={form.leader} onChange={e=>change("leader", e.target.value)} placeholder="Your real name" /> </div> <div> <Label>Free Fire UID</Label> <Input required value={form.uid} onChange={e=>change("uid", e.target.value)} placeholder="123456789" /> </div> <div> <Label>Phone (WhatsApp preferred)</Label> <Input required value={form.phone} onChange={e=>change("phone", e.target.value)} placeholder="10-digit number" /> </div> <div> <Label>Email</Label> <Input type="email" value={form.email} onChange={e=>change("email", e.target.value)} placeholder="you@example.com" /> </div> <div> <Label>Members (comma separated)</Label> <Input value={form.members} onChange={e=>change("members", e.target.value)} placeholder="IGN1, IGN2, IGN3" /> </div> </div> <div className="grid grid-cols-1 md:grid-cols-2 gap-3"> <div> <Label>Payment Ref (if paid)</Label> <Input value={form.payment} onChange={e=>change("payment", e.target.value)} placeholder="UPI txn id" /> </div> <div> <Label>Notes</Label> <Input value={form.notes} onChange={e=>change("notes", e.target.value)} placeholder="Any special request" /> </div> </div>
+
+<div className="flex items-center gap-3">
+    <Button type="submit" disabled={disabled || loading}>{disabled ? "Registration closed" : "Submit registration"}</Button>
+  </div>
+</form>
+
+); }
+
